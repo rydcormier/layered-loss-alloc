@@ -1,4 +1,4 @@
-# CLAUDE.md — reinsurance-loss-alloc
+# CLAUDE.md — layered-loss-alloc
 
 ## What this project is
 
