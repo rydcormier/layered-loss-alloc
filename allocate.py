@@ -11,6 +11,8 @@ I/O lives exclusively in run.py — this module does not read or write files.
 
 from __future__ import annotations
 
+import itertools
+
 import pandas as pd
 
 
@@ -199,16 +201,6 @@ def _apply_aal(
 ) -> list[float]:
     """Apply the annual aggregate limit to a sequence of pre-AAL cessions.
 
-    Claims must already be sorted chronologically (date asc, claim_id asc)
-    before calling this function. This function only applies the cap.
-
-    Algorithm (from spec):
-        paid_so_far = 0
-        for each ceded_pre_aal:
-            remaining_aal = aal - paid_so_far
-            ceded = min(ceded_pre_aal, max(remaining_aal, 0))
-            paid_so_far += ceded
-
     Args:
         pre_aal_cessions: Ordered list of per-claim pre-AAL cession amounts.
         aal:              Annual aggregate limit for this (year, layer) pair.
@@ -216,9 +208,13 @@ def _apply_aal(
     Returns:
         List of post-AAL cession amounts, same length as pre_aal_cessions.
     """
-    # TODO: implement AAL accumulation loop
-    # NOTE: once paid_so_far >= aal, all subsequent cessions are 0
-    raise NotImplementedError
+    paid_so_far = 0.0
+    result = []
+    for c in pre_aal_cessions:
+        ceded = min(c, max(aal - paid_so_far, 0.0))
+        paid_so_far += ceded
+        result.append(ceded)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -245,12 +241,20 @@ def _aggregate_cessions(
         DataFrame with columns ['year', 'layer_name', 'ceded_amount'],
         one row per (year, layer_name) combination, ceded_amount >= 0.
     """
-    # TODO: build DataFrame from records
-    # TODO: group by (year, layer_name) and sum ceded
-    # TODO: build complete index from itertools.product(years, layer_names)
-    # TODO: reindex to ensure zero rows are present for missing combinations
-    # TODO: reset index, rename column, return
-    raise NotImplementedError
+    full_index = pd.MultiIndex.from_tuples(
+        itertools.product(years, layer_names), names=["year", "layer_name"]
+    )
+    if records:
+        df = pd.DataFrame(records)
+        summed = df.groupby(["year", "layer_name"])["ceded"].sum()
+    else:
+        summed = pd.Series(dtype=float, name="ceded")
+        summed.index = pd.MultiIndex.from_tuples([], names=["year", "layer_name"])
+    return (
+        summed.reindex(full_index, fill_value=0.0)
+        .reset_index()
+        .rename(columns={"ceded": "ceded_amount"})
+    )
 
 
 # ---------------------------------------------------------------------------
