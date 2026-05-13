@@ -1,2 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
 .venv/
+*.egg-info/
+
+# Environment
+.env
+
+# Test coverage
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+
+# don't push data to repo
 *.csv

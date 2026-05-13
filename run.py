@@ -39,8 +39,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def load_claims(path: str) -> pd.DataFrame:
     """Read claims CSV and return a DataFrame with correct column types.
 
-    Expected columns: claim_id (str), date (date), loss (float), alae (float).
-
     Args:
         path: File path to claims CSV.
 
@@ -51,19 +49,23 @@ def load_claims(path: str) -> pd.DataFrame:
     Raises:
         SystemExit: If the file cannot be read or parsed.
     """
-    # TODO: read CSV with pd.read_csv
-    # TODO: parse 'date' column as datetime and convert to .dt.date
-    # TODO: ensure loss and alae are float
-    # TODO: ensure claim_id is str
-    # TODO: handle FileNotFoundError / parsing errors with a helpful message and sys.exit(1)
-    raise NotImplementedError
+    try:
+        df = pd.read_csv(path, parse_dates=["date"])
+        df["claim_id"] = df["claim_id"].astype(str)
+        df["date"] = df["date"].dt.date
+        for col in ("loss", "alae"):
+            df[col] = df[col].astype(float)
+        return df
+    except FileNotFoundError:
+        print(f"Error: claims file not found: {path}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as exc:
+        print(f"Error reading claims file {path!r}: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 def load_layers(path: str) -> pd.DataFrame:
     """Read layers CSV and return a DataFrame with correct column types.
-
-    Expected columns: layer_name (str), attachment (float), limit (float),
-    aal (float), alae_treatment (str).
 
     Args:
         path: File path to layers CSV.
