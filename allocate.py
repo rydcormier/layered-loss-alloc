@@ -1,13 +1,7 @@
 """
 allocate.py
 Core reinsurance loss allocation logic.
-Four concerns kept separate per spec:
-  1. Per-claim layer math  (clamp, cede_excluded, cede_pro_rata, cede_part_of, cede_claim)
-  2. AAL bookkeeping       (apply_aal)
-  3. Aggregation           (aggregate_cessions)
-  4. Public entry point    (allocate_claims)
-I/O lives exclusively in run.py — this module does not read or write files.
-# """
+"""
 
 from __future__ import annotations
 
@@ -267,52 +261,47 @@ def allocate_claims(
 ) -> pd.DataFrame:
     """Allocate claims to reinsurance layers and return a year-by-layer cession report.
 
-    For each accident year and each layer, computes the total amount ceded
-    after applying per-occurrence ALAE treatment and the annual aggregate limit.
-
     Args:
-        claims_df: DataFrame with columns:
-            - claim_id (str):  Unique claim identifier.
-            - date (date):     Loss date; accident year = date.year.
-            - loss (float):    Ground-up loss amount, >= 0.
-            - alae (float):    Allocated loss adjustment expense, >= 0.
-
-        layers_df: DataFrame with columns:
-            - layer_name (str):      Layer identifier, e.g. 'L1'.
-            - attachment (float):    Attachment point, >= 0.
-            - limit (float):         Per-occurrence limit, > 0.
-            - aal (float):           Annual aggregate limit, > 0.
-            - alae_treatment (str):  One of 'excluded', 'pro_rata', 'part_of'.
+        claims_df: DataFrame of claims
+        layers_df: DataFrame with layer information
 
     Returns:
-        Long-format DataFrame with columns:
-            - year (int):            Accident year.
-            - layer_name (str):      Layer identifier.
-            - ceded_amount (float):  Total ceded to this layer in this year.
-        One row per (year, layer_name) combination.
-        Zero rows are included where no claims hit a layer in a given year.
+        Cession report as long-format DataFrame
 
     Raises:
-        ValueError: If inputs fail validation (see _validate_inputs).
-
-    Example:
-        >>> result = allocate_claims(claims_df, layers_df)
-        >>> result.columns.tolist()
-        ['year', 'layer_name', 'ceded_amount']
+        ValueError: If inputs fail validation
     """
-    # TODO: call _validate_inputs(claims_df, layers_df)
+    _validate_inputs(claims_df, layers_df)
 
-    # TODO: derive accident year from date column
+    claims = claims_df.copy()
+    claims["year"] = pd.to_datetime(claims["date"]).dt.year
 
-    # TODO: get sorted list of unique years and layer names (for zero-row completeness)
+    years = sorted(claims["year"].unique().tolist())
+    layer_names = layers_df["layer_name"].tolist()
 
-    # TODO: for each (year, layer) combination:
-    #   a. filter claims to this year
-    #   b. sort by date asc, then claim_id asc
-    #   c. compute ceded_pre_aal for each claim using _cede_claim
-    #   d. apply AAL using _apply_aal
-    #   e. collect (year, layer_name, ceded) records
+    records = []
+    for year in years:
+        year_claims = (
+            claims[claims["year"] == year]
+            .sort_values(["date", "claim_id"])
+        )
+        for _, layer in layers_df.iterrows():
+            pre_aal = [
+                _cede_claim(
+                    row["loss"],
+                    row["alae"],
+                    layer["attachment"],
+                    layer["limit"],
+                    layer["alae_treatment"],
+                )
+                for _, row in year_claims.iterrows()
+            ]
+            post_aal = _apply_aal(pre_aal, layer["aal"])
+            for ceded in post_aal:
+                records.append({
+                    "year": year,
+                    "layer_name": layer["layer_name"],
+                    "ceded": ceded,
+                })
 
-    # TODO: call _aggregate_cessions and return result
-
-    raise NotImplementedError
+    return _aggregate_cessions(records, years, layer_names)
