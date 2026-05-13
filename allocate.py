@@ -104,10 +104,6 @@ def _clamp(x: float, lo: float, hi: float) -> float:
 def _cede_excluded(loss: float, attachment: float, limit: float) -> float:
     """Compute per-claim layer recovery under the 'excluded' ALAE treatment.
 
-    ALAE is not covered. The layer attaches to loss alone.
-
-        ceded_pre_aal = clamp(loss - attachment, 0, limit)
-
     Args:
         loss:       Ground-up loss amount for this claim (>= 0).
         attachment: Layer attachment point (>= 0).
@@ -116,8 +112,8 @@ def _cede_excluded(loss: float, attachment: float, limit: float) -> float:
     Returns:
         ceded_pre_aal as float.
     """
-    # TODO: implement excluded treatment
-    raise NotImplementedError
+    return _clamp(loss - attachment, 0.0, limit)
+
 
 
 def _cede_pro_rata(
@@ -128,13 +124,6 @@ def _cede_pro_rata(
 ) -> float:
     """Compute per-claim layer recovery under the 'pro_rata' ALAE treatment.
 
-    The layer attaches to loss alone; ALAE is recovered in the same ratio as
-    the loss recovery.
-
-        loss_in_layer = clamp(loss - attachment, 0, limit)
-        alae_in_layer = alae * (loss_in_layer / loss)   if loss > 0 else 0
-        ceded_pre_aal = loss_in_layer + alae_in_layer
-
     Args:
         loss:       Ground-up loss amount for this claim (>= 0).
         alae:       ALAE for this claim (>= 0).
@@ -144,9 +133,9 @@ def _cede_pro_rata(
     Returns:
         ceded_pre_aal as float.
     """
-    # TODO: implement pro_rata treatment
-    # NOTE: guard against division by zero — if loss == 0, alae recovery is 0
-    raise NotImplementedError
+    loss_in_layer = _clamp(loss - attachment, 0.0, limit)
+    alae_in_layer = alae * (loss_in_layer / loss) if loss > 0 else 0.0
+    return loss_in_layer + alae_in_layer
 
 
 def _cede_part_of(
@@ -157,11 +146,6 @@ def _cede_part_of(
 ) -> float:
     """Compute per-claim layer recovery under the 'part_of' ALAE treatment.
 
-    ALAE is rolled into the ground-up amount the layer attaches to.
-
-        ground_up     = loss + alae
-        ceded_pre_aal = clamp(ground_up - attachment, 0, limit)
-
     Args:
         loss:       Ground-up loss amount for this claim (>= 0).
         alae:       ALAE for this claim (>= 0).
@@ -171,8 +155,7 @@ def _cede_part_of(
     Returns:
         ceded_pre_aal as float.
     """
-    # TODO: implement part_of treatment
-    raise NotImplementedError
+    return _clamp(loss + alae - attachment, 0.0, limit)
 
 
 def _cede_claim(
@@ -183,9 +166,6 @@ def _cede_claim(
     alae_treatment: str,
 ) -> float:
     """Dispatch to the correct ALAE treatment and return ceded_pre_aal.
-
-    This is the single entry point for per-claim layer math.
-    All three treatments are pure functions — no state, no side effects.
 
     Args:
         loss:           Ground-up loss amount for this claim (>= 0).
@@ -200,10 +180,13 @@ def _cede_claim(
     Raises:
         ValueError: If alae_treatment is not a recognised value.
     """
-    # TODO: dispatch to _cede_excluded, _cede_pro_rata, or _cede_part_of
-    # TODO: raise ValueError for unknown treatment (should already be caught by
-    #       validation, but defensive check here is fine)
-    raise NotImplementedError
+    if alae_treatment == "excluded":
+        return _cede_excluded(loss, attachment, limit)
+    if alae_treatment == "pro_rata":
+        return _cede_pro_rata(loss, alae, attachment, limit)
+    if alae_treatment == "part_of":
+        return _cede_part_of(loss, alae, attachment, limit)
+    raise ValueError(f"Unknown alae_treatment: {alae_treatment!r}")
 
 
 # ---------------------------------------------------------------------------
